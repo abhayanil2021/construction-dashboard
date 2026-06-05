@@ -157,31 +157,54 @@ const Ico = {
 export default function App() {
   const [file, setFile]       = useState(null);
   const [records, setRecords] = useState([]);
+  const [contractorSummary, setContractorSummary] = useState([]);
   const [search, setSearch]   = useState("");
+  const [reportType, setReportType] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const uploadPDF = async () => {
     if (!file) { alert("Please select a PDF file"); return; }
     const fd = new FormData();
     fd.append("file", file);
+    setLoading(true);
+    setProgress(0);
+    const interval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 90) return prev;
+        return prev + 5;
+      });
+    }, 300);
     try {
       const res  = await fetch("http://127.0.0.1:8000/upload-pdf", { method: "POST", body: fd });
       const data = await res.json();
+      clearInterval(interval);
+      setProgress(100);
+      setTotalLabourers(data.total_labourers || 0);
+      setReportType(data.report_type || "");
+      setContractorSummary(
+        data.contractor_summary || []
+      );
       console.log(data.records)
       setRecords(
-  data.records.map((record) => ({
+    data.records.map((record) => ({
     date: record.date,
     site: data.site,
     contractor: record.contractor,
     type: data.type_of_work,
     skilled: record.skilled,
     unskilled: record.unskilled,
-    activity: record.activity,
     quantity: record.quantity,
-    remark: record.remark,
+    quantity_numeric: record.quantity_numeric
   }))
 );
-      alert("PDF uploaded successfully");
-    } catch (err) { console.error(err); alert("Upload failed"); }
+      setTimeout(() => {
+        setLoading(false);
+      }, 300);
+    } catch (err) {clearInterval(interval);
+  setLoading(false);
+  console.error(err);
+  alert("Upload failed");}
   };
 
   const exportToExcel = async () => {
@@ -189,16 +212,19 @@ export default function App() {
     const ws = wb.addWorksheet("DPR Report");
     ws.mergeCells("A1:A2"); ws.mergeCells("B1:B2"); ws.mergeCells("C1:C2");
     ws.mergeCells("D1:D2"); ws.mergeCells("E1:F1"); ws.mergeCells("G1:G2");
-    ws.mergeCells("H1:H2"); ws.mergeCells("I1:I2");
     ws.getRow(1).height = 25; ws.getRow(2).height = 25;
     ws.getCell("A1").value = "DATE";           ws.getCell("B1").value = "SITE";
     ws.getCell("C1").value = "Contractor Name"; ws.getCell("D1").value = "Type of Work";
-    ws.getCell("E1").value = "Total No of Labour"; ws.getCell("G1").value = "ACTIVITY";
-    ws.getCell("H1").value = "QUANTITY";        ws.getCell("I1").value = "REMARK";
+    ws.getCell("G1").value = "QUANTITY";
     ws.getCell("E2").value = "Skilled";         ws.getCell("F2").value = "Unskilled";
     ws.columns = [
-      {width:18},{width:20},{width:25},{width:18},
-      {width:12},{width:12},{width:30},{width:15},{width:20},
+      {width:18},
+      {width:20},
+      {width:25},
+      {width:18},
+      {width:12},
+      {width:12},
+      {width:50}
     ];
     [1,2].forEach((n) => {
       ws.getRow(n).font      = { bold: true, size: 12 };
@@ -207,8 +233,15 @@ export default function App() {
     let ri = 3;
     records.forEach((row) => {
       const vals = [
-        row.date,row.site,row.contractor,row.type,row.skilled,row.unskilled,row.activity,row.quantity,row.remark || "-"];
-      ["A","B","C","D","E","F","G","H","I"].forEach((col,i) => {
+        row.date,
+        row.site,
+        row.contractor,
+        row.type,
+        row.skilled,
+        row.unskilled,
+        row.quantity || "-"
+      ];
+      ["A","B","C","D","E","F","G"].forEach((col,i) => {
         ws.getCell(`${col}${ri}`).value = vals[i];
       });
       ri++;
@@ -228,6 +261,7 @@ export default function App() {
   ).values()
 ];
 
+const [totalLabourers, setTotalLabourers] = useState(0);
 const totalSkilled = uniqueContractors.reduce(
   (sum, r) => sum + Number(r.skilled || 0),
   0
@@ -237,10 +271,10 @@ const totalUnskilled = uniqueContractors.reduce(
   (sum, r) => sum + Number(r.unskilled || 0),
   0
 );
-
-const totalLabourers =
-  totalSkilled + totalUnskilled;
-  const totalQuantity  = records.reduce((s,r) => s + Number(r.quantity || 0), 0);
+const totalQuantity = records.reduce(
+  (s, r) => s + (Number(r.quantity_numeric) || 0),
+  0
+);
   const currentSite =
   records.length > 0
     ? records[0].site
@@ -250,7 +284,7 @@ const totalLabourers =
     if (!search.trim()) return records;
     const q = search.toLowerCase();
     return records.filter((r) =>
-      [r.site, r.contractor, r.activity].some((v) => v && v.toLowerCase().includes(q))
+      [r.site, r.contractor, r.quantity].some((v) => v && v.toLowerCase().includes(q))
     );
   }, [records, search]);
 
@@ -294,6 +328,45 @@ const totalLabourers =
         <main className="content">
 
           <div className="upanel">
+            {loading && (
+  <div
+    style={{
+      width: "100%",
+      marginBottom: "15px"
+    }}
+  >
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        marginBottom: "6px",
+        fontSize: "13px"
+      }}
+    >
+      <span>Processing PDF...</span>
+      <span>{progress}%</span>
+    </div>
+
+    <div
+      style={{
+        width: "100%",
+        height: "10px",
+        background: "#E0E8F4",
+        borderRadius: "999px",
+        overflow: "hidden"
+      }}
+    >
+      <div
+        style={{
+          width: `${progress}%`,
+          height: "100%",
+          background: "#1757C2",
+          transition: "width 0.3s ease"
+        }}
+      />
+    </div>
+  </div>
+)}
             <label className="ulabel">
               <Ico.File />
               <span>{file ? "Change file" : "Select PDF"}</span>
@@ -301,7 +374,7 @@ const totalLabourers =
             </label>
             <span className="fname">{file ? file.name : "No file selected"}</span>
             <div className="sep" />
-            <button className="btn btn-blue" onClick={uploadPDF}>
+            <button className="btn btn-blue" onClick={uploadPDF}disabled={loading}>
               <Ico.Upload /> Upload PDF
             </button>
             <button className="btn btn-green" onClick={exportToExcel}>
@@ -323,8 +396,10 @@ const totalLabourers =
         {currentSite}
       </div>
       <div className="kpi-meta">
-        Project Location
-      </div>
+  {reportType
+    ? reportType.toUpperCase() + " REPORT"
+    : "Project Location"}
+</div>
     </div>
 
     <div className="kpi-ico bl">
@@ -376,6 +451,72 @@ const totalLabourers =
   </div>
 
 </div>
+<div className="tcard" style={{ marginBottom: "20px" }}>
+  <div className="tcard-top">
+    <span className="tcard-ttl">
+      <Ico.Hat /> Contractor Summary
+    </span>
+  </div>
+
+  <div className="twrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Contractor</th>
+          <th>Skilled</th>
+          <th>Unskilled</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {contractorSummary.map((row, i) => (
+          <tr key={i}>
+            <td className="td-s">{row.contractor}</td>
+            <td>{row.skilled}</td>
+            <td>{row.unskilled}</td>
+            <td>
+              <strong>{row.total}</strong>
+            </td>
+          </tr>
+        ))}
+
+        <tr>
+          <td>
+            <strong>TOTAL</strong>
+          </td>
+
+          <td>
+            <strong>
+              {contractorSummary.reduce(
+                (sum, r) => sum + r.skilled,
+                0
+              )}
+            </strong>
+          </td>
+
+          <td>
+            <strong>
+              {contractorSummary.reduce(
+                (sum, r) => sum + r.unskilled,
+                0
+              )}
+            </strong>
+          </td>
+
+          <td>
+            <strong>
+              {contractorSummary.reduce(
+                (sum, r) => sum + r.total,
+                0
+              )}
+            </strong>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
           
             <div className="toolbar">
               <div className="sfld">
@@ -404,15 +545,13 @@ const totalLabourers =
 <th>Type of Work</th>
 <th>Skilled</th>
 <th>Unskilled</th>
-<th>Activity</th>
 <th>Quantity</th>
-<th>Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
                     <tr className="erow">
-                      <td colSpan="9">
+                      <td colSpan="8">
                         <div className="einner">
                           <div className="eico"><Ico.Inbox /></div>
                           <div className="ettl">{records.length === 0 ? "No records loaded" : "No results found"}</div>
@@ -431,9 +570,9 @@ const totalLabourers =
 <td>{row.skilled}</td>
 <td>{row.unskilled}</td>
 
-<td className="td-ac">{row.activity}</td>
-<td><span className="qbadge">{row.quantity}</span></td>
-<td className="td-ac">{row.remark || "—"}</td>
+<td className="td-ac">
+  {row.quantity}
+</td>
                       </tr>
                     ))
                   )}

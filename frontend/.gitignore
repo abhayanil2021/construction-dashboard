@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Python
+__pycache__/
+*.pyc
+
+# Uploaded PDFs
+backend/uploads/
+backend/backend/uploads/
+
+# Debug files
+backend/debug.txt
+debug.txt

@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+
+# Debug
+debug.txt
+backend/debug.txt
+
+# Uploaded files
+backend/uploads/
+backend/backend/uploads/
