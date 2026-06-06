@@ -176,7 +176,7 @@ export default function App() {
       });
     }, 300);
     try {
-      const res  = await fetch("http://127.0.0.1:8000/upload-pdf", { method: "POST", body: fd });
+      const res  = await fetch("https://construction-dashboard-8sdy.onrender.com/upload-pdf", { method: "POST", body: fd });
       const data = await res.json();
       clearInterval(interval);
       setProgress(100);
